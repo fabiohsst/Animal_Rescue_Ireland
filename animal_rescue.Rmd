@@ -1,0 +1,625 @@
+---
+title: "Animal Rescue in Ireland"
+author: "Fabio Tavares"
+date: "21/12/2022"
+output: 
+    bookdown::word_document2:
+    fig_caption: true
+---
+
+```{r setup, include= FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE,
+    message = FALSE,
+    warning = FALSE,
+    out.width = "100%",
+    out.height = "500px",
+    fig.align = "center")
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(recipes)
+library(naniar)
+library(dplyr)
+library(stringr)
+library(readr)
+library(ggplot2)
+library(forcats)
+```
+
+```{r}
+animal_rescue <- read_csv("data/data.csv")
+```
+
+# Problem Statement
+
+The purpose of this report is to provide information on the costs associated with animal rescues in Ireland. By analyzing data on the expenses incurred and the types of animals and interventions involved, was aimed to identify ways to reduce the annual expenditure on animal rescues through preventive measures.
+
+# Solution Statement
+
+An exploratory analysis of a dataset containing records of animal rescues in Ireland from 2009 to 2022 will be conducted with the goal of identifying the animal groups and service types per animal groups that contribute the most to the expenses incurred. By understanding the factors contributing to these costs, recommendations for further studies and interventions that will help to create preventive approaches to these issues and ultimately reduce the expenditure on animal rescues in Ireland can be made. 
+The aim of this solution is to gain a better understanding of the areas where the greatest expenses are incurred in animal rescues.
+
+# Exploratory Analyses
+
+## Data Cleaning
+
+First was checked the attributes formats and content.
+
+### Check Formats and samples
+
+```{r echo=FALSE, fig.cap = "Variation in Heating Load from 2012-2014"}
+
+# Check attributes formats and samples values
+summary(animal_rescue)
+```
+### Check unique values in nominal attributes
+
+**AnimalGroupParent**
+
+```{r}
+# AnimalGroupParent
+unique(animal_rescue$AnimalGroupParent)
+```
+**PropertyCategory**
+
+```{r}
+# PropertyCategory
+unique(animal_rescue$PropertyCategory)
+```
+**SpecialServiceTypeCategory**
+
+```{r}
+# SpecialServiceTypeCategory
+unique(animal_rescue$SpecialServiceTypeCategory)
+```
+**SpecialServiceType**
+
+```{r}
+# SpecialServiceType
+unique(animal_rescue$SpecialServiceType)
+```
+**Area**
+
+```{r}
+# Area
+unique(animal_rescue$Area)
+```
+
+The Dataset has 8 columns with a total of 8,939 rows. There are data format issues and type mistakes on the variables to correct:
+
+**Data formats:**
+
+- DateTimeOfCall: It's in character format. It will be converted to datetime.
+
+- IncidentNotionalCost: It's numeric value as in column HourlyNotionalCost. It will be converted to integer.
+
+**Type mistakes:**
+
+- AnimalGroupParent
+
+- Property Category
+
+- Area
+
+### Convert column DateTimeOfCall in datetime and Incident Notional Cost in integer
+
+```{r}
+# Convert column DateTimeOfCall in datetime
+animal_rescue <- animal_rescue %>% 
+  mutate(DateTimeOfCall = dmy_hm(DateTimeOfCall)) %>% 
+    mutate(IncidentNotionalCost = strtoi(IncidentNotionalCost))
+
+# Convert Incident Notional Cost in integer
+animal_rescue <- animal_rescue %>% 
+  mutate(IncidentNotionalCost = strtoi(IncidentNotionalCost))
+
+glimpse(animal_rescue)
+```
+### Fix up type mistakes
+
+```{r}
+
+# AnimalGroupParent
+animal_rescue <- animal_rescue %>% 
+mutate(AnimalGroupParent = case_when(
+  AnimalGroupParent == "Ra^&it" ~ "Rabbit",
+  AnimalGroupParent == "D+g" ~ "Dog",
+  AnimalGroupParent == "Ca&" ~ "Cat",
+  AnimalGroupParent == "Ca$" ~ "Cat",
+  AnimalGroupParent == "Bir*" ~ "Bird",
+  AnimalGroupParent == "Bi^&" ~ "Bird",
+  AnimalGroupParent == "cat" ~ "Cat",
+  TRUE ~ AnimalGroupParent
+))
+
+# PropertyCategory
+animal_rescue <- animal_rescue %>% 
+mutate(PropertyCategory = case_when(
+  PropertyCategory == "Dwe^&ing" ~ "Dwelling",
+  PropertyCategory == "Dwe!!ing" ~ "Dwelling",
+    TRUE ~ PropertyCategory
+))
+
+# Area
+animal_rescue <- animal_rescue %>% 
+mutate(PropertyCategory = case_when(
+  PropertyCategory == "Rathm&^es" ~ "Rathmines",
+  PropertyCategory == "Drumco\"!ra" ~ "Drumcondra",
+  PropertyCategory == "Ta!!aght" ~ "Tallaght",
+  PropertyCategory == "Donnybr$*k" ~ "Donnybrook",
+  PropertyCategory == "SUTTON" ~ "Sutton",
+    TRUE ~ PropertyCategory
+))
+
+animal_rescue %>% 
+    select(AnimalGroupParent,PropertyCategory, Area) %>% 
+    glimpse()
+
+```
+
+### Missing values
+
+There are some missing values on the columns "IncidentNotionalCost" and "Area". Those missing values represents less than 1% of the Data, so was chosen to delete them.
+
+```{r}
+# Display missing values
+animal_rescue %>%
+    miss_var_summary()
+
+# Delete missing values on dataset
+animal_rescue <- na.omit(animal_rescue)
+```
+
+
+## Understanding the Data
+
+**First and last record:**
+
+```{r}
+animal_rescue %>% 
+summarise(first_record     = min(DateTimeOfCall),
+          last_record     = max(DateTimeOfCall))
+```
+**Notional Cost per hour:**
+```{r}
+unique(animal_rescue$HourlyNotionalCost)
+```
+
+The Dataset samples are from 01/01/2009 to 30/09/2022 and each record corresponds to an Animal rescue. The column "HourlyNotionalCost" have the estimate cost per hour and the total cost is represented in the column "IncidentNotionalCost". Notional Cost, or Implicit cost, for each incident registered is an estimation and it raised up throughout the years. 
+
+The column "AnimalGroupParent" records the Animal specie rescued in each intervention. 
+
+## NotionalCost per year
+
+As it possible to see on graph 1, the amount spent in Animal Rescue throughout the years increased significantly, with strong increases in 2016 (23%), 2018 (17%), 2020 (27%) and 2021 (13%) . Alike The amount spent, the hourly cost increased, highlighting an increase of 12% in 2013 and 9% in 2016 (graph 2). Although the raise on the Hourly Notional Cost was consistent, doesn't seems to be the main reason for the substantial increase on the amount expended in 2016, 2018, 2020 and 2021. 
+
+```{r}
+# Create columns Year, Month and Week
+animal_rescue <- animal_rescue %>%
+    mutate(year  = year(DateTimeOfCall),
+           month = month(DateTimeOfCall),
+           week  = week(DateTimeOfCall)
+           )
+
+# Group Cost per year
+cost_year <- animal_rescue %>% 
+    mutate(year = as.factor(year)) %>% 
+    mutate(year = year) %>%
+    group_by(year) %>% 
+    arrange(desc(year)) %>% 
+    
+# Create up the total cost per year
+    summarise(cost = sum(IncidentNotionalCost)) %>% 
+    
+# Create a column with increase rate
+    mutate("increase_rate (%)" = round(((cost - lag(cost))/lag(cost))*100))
+    
+cost_year
+```
+```{r}
+# Display the Hourly cost increase throughout the years
+hourly_cost <- animal_rescue %>% 
+    mutate(year = as.factor(year)) %>% 
+    mutate(year = year) %>%
+    group_by(year) %>% 
+    
+# Create a new column with average hourly cost per year
+    summarise(cost = median(HourlyNotionalCost)) %>% 
+
+# Create a new column with the difference on average hourly cost per year
+    mutate("increase_rate (%)" = round(((cost - lag(cost))/lag(cost))*100))
+
+
+hourly_cost
+```
+
+
+### Plot total cost per year
+
+```{r, fig.width=10,fig.height=4}
+
+# Total cost per year graph
+ggplot(data=cost_year, aes(x=year, y=cost, group = 1,label = cost)) +
+    geom_line(color="#69b3a2", size = 1)+
+    geom_point(color="#69b3a2")+
+    geom_text(aes(label=cost),nudge_y = 16000, vjust=1.6, color="black", size=4, face = 'bold')+
+    labs(x = "Year", Y = "Cost",
+         title = "Total Cost per year",
+         caption = "graph 1 Total cost per year")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 18, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 10))
+```
+
+
+
+### Plot hourly cost per year
+
+```{r, fig.width=10,fig.height=4}
+
+# Hourly cost per year graph
+ggplot(data=hourly_cost, aes(x=year, y=cost, group=1, label = cost))+
+    geom_line(color="#69b3a2", size = 0.8)+
+    geom_point(color="#69b3a2")+
+    geom_text(aes(label=cost),nudge_y = 10, vjust=1.6, color="black", size=4, face = 'bold')+
+    labs(x = "Year", Y = "Hourly Cost",
+         title = "Hourly cost per year",
+         caption = "graph 2 Hourly cost per year")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 18, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 10))
+```
+
+Looking at the number of interventions per year (graph 3), it's possible to see a significant growth in the years 2016 (11%), 2018 (12%), 2020 (26%) and 2021(16%). By visual inspection is possible to see that the number of interventions seems to have a positive correlation with the total implicit cost per year in animal rescues. 
+
+Now on we are going to see the animal groups that most have occurrences per year.
+
+### Plot number of interventions per year
+
+```{r}
+# Group Cost per year
+rescues_year <- animal_rescue %>% 
+    mutate(year = as.factor(year)) %>% 
+    mutate(year = year) %>%
+    group_by(year) %>% 
+    arrange(desc(year)) %>% 
+    
+# Create new column with count of interventions
+    summarise(count = n()) %>% 
+    
+# Create a new column with the increase rate of number of interventions
+    mutate("increase_rate(%)" = round(((count - lag(count))/lag(count))*100))
+    
+rescues_year
+```
+
+```{r, fig.width=10,fig.height=4}
+
+# Number of interventions per year graph
+ggplot(data=rescues_year, aes(x=year, y=count, group=1, label = count)) +
+    geom_line(color="#69b3a2", size = 0.8)+
+    geom_point(color="#69b3a2")+
+    geom_text(aes(label=count),nudge_y = 30, vjust=1.6, color="black", size=4, face = 'bold')+
+    labs(x = "Year", Y = "Count",
+         title = "Number of Interventions per year",
+         caption = "graph 3 Interventions per year")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 18, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 10))
+```
+
+## Ocurrences per Animal Group
+
+Cats accounted for the majority of incidents, representing 48.96% of all occurrences. They were followed by birds, which made up 20.68% of incidents, and dogs, which accounted for 15.07%. In total, these three animal groups represented 84.72% of all incidents as visualized in graph 4.
+
+```{r}
+
+# Group, count occurrences per Animal Group and arrange descending
+occurrences_per_animal_group <- animal_rescue %>%
+    mutate(AnimalGroupParent = as_factor(AnimalGroupParent)) %>%
+    mutate(AnimalGroupParent = AnimalGroupParent %>% fct_rev()) %>% 
+    group_by(AnimalGroupParent) %>% 
+    summarise(Count = n())%>%
+    arrange(-(Count))
+    
+# Add column with the percentage of each column represents and cumulative
+occurrences_per_animal_group %>% 
+    mutate(Occurrences = Count/sum(Count)*100) %>% 
+    mutate(Cumulative = cumsum(Occurrences))
+```
+
+```{r, fig.width=16,fig.height=10}
+
+# Add up the AnimalGroupParent besides top 5
+AnimalGroupParent <- "Rest"
+Count <- sum(occurrences_per_animal_group$Count[6:nrow(occurrences_per_animal_group)])
+
+new_row <- data.frame(AnimalGroupParent=AnimalGroupParent, Count=Count)
+
+occurrences_per_animal_group <- rbind(occurrences_per_animal_group[1:5, ], new_row)
+
+# Plot number of Interventions per AnimalGroupParents
+ggplot(data=occurrences_per_animal_group, 
+       aes(x = reorder(AnimalGroupParent, Count, decreasing = TRUE), 
+           y = Count,group=1, label = Count,))+
+    geom_bar(stat="identity",fill="#69b3a2")+
+    geom_text(aes(label=Count), vjust=1.6, color="white", size=8)+
+    labs(x = "Animal Group", Y = "Count",
+         title = "Number of Interventions per AnimalGroupParents",
+         caption = "graph 4 Interventions per AnimalGroupParents")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 34, face = "bold"),
+          axis.title = element_text(size = 22, face = "bold"),
+          axis.text.x = element_text(size = 18),
+          axis.text.y = element_text(size = 18),
+          plot.caption = element_text(size = 20))
+```
+
+## Service category to Cat rescues
+
+Of the incidents involving cats (graph 5), 81.48% can be broken down into three service categories: animal rescue from height (42.25%), assist trapped domestic animal (28.27%), and animal rescue from below ground (10.97%).
+
+```{r}
+
+# Separate SpecialServiceTYpe in two columns
+animal_rescue <- animal_rescue %>%
+    separate(SpecialServiceType,c('SpecialServiceType','Tag'),sep = '-')
+animal_rescue$Tag <- animal_rescue$Tag %>% str_trim(side = "left")
+
+
+# Group, count occurrences per Animal Group and arrange descending
+service_category_cat <- animal_rescue %>%
+    mutate(SpecialServiceType = as_factor(SpecialServiceType)) %>%
+    mutate(SpecialServiceType = SpecialServiceType %>% fct_rev()) %>% 
+    group_by(SpecialServiceType) %>% 
+    filter(AnimalGroupParent == "Cat") %>% 
+    summarise(Count = n())%>%
+    arrange(-(Count))
+
+# Add column with the percentage of each column represents and cumulative
+service_category_cat %>% 
+    mutate(Occurrences = (Count/sum(Count)*100)) %>% 
+    mutate(Cumulative = cumsum(Occurrences))
+
+```
+
+```{r, fig.width=16,fig.height=8}
+
+# Add up the AnimalGroupParent besides top 5
+SpecialServiceType <- "Rest"
+Count <- sum(service_category_cat$Count[6:nrow(service_category_cat)])
+
+new_row <- data.frame(SpecialServiceType=SpecialServiceType, Count=Count)
+
+service_category_cat <- rbind(service_category_cat[1:5, ], new_row)
+
+# Plot number of Interventions per AnimalGroupParents
+ggplot(data=service_category_cat, 
+       aes(x = reorder(SpecialServiceType, Count, decreasing = TRUE), 
+           y = Count,group=1, label = Count,))+
+    geom_bar(stat="identity",fill="#69b3a2")+
+    geom_text(aes(label=Count), vjust=1.6, color="white", size=6, face = 'bold')+
+    labs(x = "Service type", Y = "Count",
+         title = "Service categories to Cat rescues",
+         caption = "graph 5 Service categories to Cat rescues")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 24, face = "bold"),
+          axis.title = element_text(size = 16, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 12))
+```
+
+## Service category to Bird Rescues
+
+For bird rescues (graph 6), two categories stood out: animal rescue from height and assist trapped wild animal, with 1141 and 331 cases recorded from 2009 to 2022, respectively. Together, these categories made up 80.26% of all incidents involving bird rescue.
+
+```{r}
+# Group, count occurrences per Animal Group and arrange descending
+service_category_bird <- animal_rescue %>%
+    mutate(SpecialServiceType = as_factor(SpecialServiceType)) %>%
+    mutate(SpecialServiceType = SpecialServiceType %>% fct_rev()) %>% 
+    group_by(SpecialServiceType) %>% 
+    filter(AnimalGroupParent == "Bird") %>% 
+    summarise(Count = n())%>%
+    arrange(-(Count))
+
+# Add column with the percentage of each column represents and cumulative
+service_category_bird %>% 
+    mutate(Occurrences = (Count/sum(Count)*100)) %>% 
+    mutate(Cumulative = cumsum(Occurrences))
+
+```
+
+```{r, fig.width=16,fig.height=8}
+# Add up the AnimalGroupParent besides top 5
+SpecialServiceType <- "Rest"
+Count <- sum(service_category_bird$Count[6:nrow(service_category_bird)])
+
+new_row <- data.frame(SpecialServiceType=SpecialServiceType, Count=Count)
+
+service_category_bird <- rbind(service_category_bird[1:5, ], new_row)
+
+# Plot number of Interventions per AnimalGroupParents
+ggplot(data=service_category_bird, 
+       aes(x = reorder(SpecialServiceType, Count, decreasing = TRUE), 
+           y = Count,group=1, label = Count,))+
+    geom_bar(stat="identity",fill="#69b3a2")+
+    geom_text(aes(label=Count), vjust=1.6, color="white", size=6, face = 'bold')+
+    labs(x = "Service type", Y = "Count",
+         title = "Service categories to Bird rescues",
+         caption = "graph 6 Service categories to Dog rescues")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 24, face = "bold"),
+          axis.title = element_text(size = 16, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 12))
+```
+
+
+## Service categories to Dog rescues
+
+Of the three animal groups, dogs had the most diverse range of service types (graph 7). The most common reason for rescue among this group was being trapped domestic animal, accounting for 35.62% of cases. This was followed by rescue from below ground (13.92%), water (12.95%), assistance involving livestock (12.87%), rescue from height (10.63%), and assistance involving domestic animals (9.43%). These service categories made up 95.43% of all incidents involving dogs.
+
+```{r}
+
+# Group, count occurrences per Animal Group and arrange descending
+service_category_dog <- animal_rescue %>%
+    mutate(SpecialServiceType = as_factor(SpecialServiceType)) %>%
+    mutate(SpecialServiceType = SpecialServiceType %>% fct_rev()) %>% 
+    group_by(SpecialServiceType) %>% 
+    filter(AnimalGroupParent == "Dog") %>% 
+    summarise(Count = n())%>%
+    arrange(-(Count))
+
+# Add column with the percentage of each column represents and cumulative
+service_category_dog %>% 
+    mutate(Occurrences = (Count/sum(Count)*100)) %>% 
+    mutate(Cumulative = cumsum(Occurrences))
+```
+
+```{r, fig.width=16,fig.height=8}
+
+# Add up the AnimalGroupParent besides top 6
+SpecialServiceType <- "Rest"
+Count <- sum(service_category_dog$Count[7:nrow(service_category_dog)])
+
+new_row <- data.frame(SpecialServiceType=SpecialServiceType, Count=Count)
+
+service_category_dog <- rbind(service_category_dog[1:6, ], new_row)
+
+# Plot number of Interventions per AnimalGroupParents
+ggplot(data=service_category_dog, 
+       aes(x = reorder(SpecialServiceType, Count, decreasing = TRUE), 
+           y = Count,group=1, label = Count,))+
+    geom_bar(stat="identity",fill="#69b3a2")+
+    geom_text(aes(label=Count), vjust=1.6, color="white", size=6, face = 'bold')+
+    labs(x = "Service type", Y = "Count",
+         title = "Service categories to Dog rescues",
+         caption = "graph 7 Service categories to Dog rescues")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 24, face = "bold"),
+          axis.title = element_text(size = 16, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 12))
+```
+
+## Amount expended per year by top 3 animal groups
+
+From 2019 to 2022, there was an increase of more than 80% in the amount spent on interventions for cats. In contrast, there was a 13% decrease in the amount spent on bird rescues from 2020 to 2022, and a 14% decrease in the amount spent on dog rescues from 2021 to 2022 as displayed in graph 8.
+
+```{r}
+
+# Group top 3 biggest animal group cost
+top_3_animal <- animal_rescue %>% 
+    filter(AnimalGroupParent %in%  c("Cat","Bird","Dog")) %>% 
+    mutate(AnimalGroupParent = as_factor(AnimalGroupParent)) %>%
+    mutate(AnimalGroupParent = AnimalGroupParent %>% fct_rev()) %>% 
+    group_by(AnimalGroupParent,year) %>% 
+    summarise(CostPerYear = sum(IncidentNotionalCost)) %>% 
+    arrange(year)
+
+top_3_animal
+```
+```{r, fig.width=12,fig.height=6}
+
+# Number of interventions per year graph
+ggplot(data=top_3_animal, aes(x=year, y=CostPerYear, 
+                              group=AnimalGroupParent,
+                              color = AnimalGroupParent,
+                              label = CostPerYear )) +
+    geom_text(aes(label=CostPerYear),nudge_y = 7900, vjust=1.6, color="black", size=4, face = 'bold')+
+    geom_line(size = 1)+
+    geom_point()+
+    labs(x = "Year", Y = "Cost",
+         title = "Amount expended per year by top 3 animal groups",
+         caption = "graph 8 Amount expended per year by top 3 animal groups")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 18, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"),
+          axis.text.x = element_text(size = 10),
+          axis.text.y = element_text(size = 10),
+          plot.caption = element_text(size = 10))
+```
+
+On average, €188,919 is spent on animal rescues for these three animal groups, with the majority (57.85%) being allocated to Cat rescues.
+
+```{r}
+
+# Create new column with Mean Totcal Cost per Year
+top_3_animal_mean <- top_3_animal %>% 
+    summarise(MeanTotalCostPerYear = round(mean(CostPerYear))) %>% 
+    arrange(-(MeanTotalCostPerYear))
+
+top_3_animal_mean %>% 
+    mutate(CostPct = (MeanTotalCostPerYear/sum(MeanTotalCostPerYear)*100)) %>% 
+    mutate(Cumulative = cumsum(CostPct))
+```
+
+```{r, fig.width=16,fig.height=10}
+
+
+# Plot number of Interventions per AnimalGroupParents
+ggplot(data=top_3_animal_mean, 
+       aes(x = reorder(AnimalGroupParent, MeanTotalCostPerYear, decreasing = TRUE), 
+           y = MeanTotalCostPerYear,group=1, label = MeanTotalCostPerYear,))+
+    geom_bar(stat="identity",fill="#69b3a2")+
+    geom_text(aes(label=MeanTotalCostPerYear), vjust=1.6, color="white", size=8, face = 'bold')+
+    labs(x = "Service type", Y = "Mean Total Cost Per Year",
+         title = "Top 3 animals with more occurrences mean total cost per year",
+         caption = "graph 9 Top 3 animals with more occurrences mean total cost per year")+
+    theme_classic()+
+    theme(plot.title = element_text(size = 28, face = "bold"),
+          axis.title = element_text(size = 22, face = "bold"),
+          axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 18),
+          plot.caption = element_text(size = 14))
+
+```
+
+
+# Conclusion
+
+Cats are frequently in need of rescue, and this has become a growing issue, with costs rising more than 80% from 2019 to 2022. The main cause of these interventions is cats being stuck in high places, accounting for 42.2% of cases from 2009 to 2022, followed by incidents involving traps, which represent 28.3% of the total events.
+
+An interesting finding is that livestock animals represents a small part of the total amount expended registered from the period analysed, with about 5% of the incidents.
+
+During warm periods, a phenomenon known as High-Rise Syndrome often occurs, as people tend to leave windows open, increasing the likelihood of cats falling or getting stuck in places they cannot escape from on their own[1]. Risk communication can be an effective way to reduce the number of incidents and inform cat owners of the risks to their pets and how to mitigate them. Multidisciplinary studies are needed to understand the causes of these issues and identify ways to reduce them, as well as to answer questions such as:
+
+- When do the cases start to increase during the year?
+- Are there any modifications that need to be made to the homes of owners to reduce the risk of these issues?
+- Who is the main audience for effective risk communication, taking into consideration areas with a higher number of cases, the age
+of pet owners, and the main media (social media, television, magazines, etc.)?
+
+Rescue from height continues to be a problem, with birds being rescued 1141 times between 2009 and 2022, representing 62.2% of incidents related to this issue. Fledgling (ready to fly) and nestling (too young to fly) birds are a critical period when birds may be injured by falls or become stuck[2]. Further studies are necessary to understand:
+
+Is there a specific period of the year when these cases occur more frequently?
+- What are the main species that this happens to and what is their normal behavior?
+- Where do they typically build their nests?
+- What is their size?
+- Are there engineering solutions or is it possible to create ones that will reduce the number of occurrences?
+- In Ireland, an average of more than €150,000 is spent each year on cat and bird rescues. Further studies are needed to determine how much could be saved in implicit costs by taking the recommended actions above. A reduction of 20% in the number of cases would represent a saving of €30,000 per year and €150,000 over a period of 5 years. 
+
+In conclusion, this report can serve as a valuable resource for new multidisciplinary studies in the years ahead, and we hope that it will help to guide efforts to reduce animal rescues in Ireland. By combining the insights and expertise of various disciplines, such as veterinary medicine, animal behavior, and public policy, it's possible to develop more comprehensive and effective strategies.
+
+# References
+
+[1]: Pet Assure(2018). Understanding Why Cats Like High Places 
+Retrieved from https://www.petassure.com/new-newsletters/understanding-why-cats-like-high-places/. 
+
+[2]: Best Friends(2019). Baby Bird Rescue 
+Retrieved from https://resources.bestfriends.org/article/baby-bird-rescue. 
