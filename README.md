@@ -1,4 +1,4 @@
-# Animal Rescue in Ireland (Exploratory Data Analysis)
+# Animal Rescue in Ireland (Exploratory Data Analysis with R)
 
 **Author:** Fabio Tavares
 
