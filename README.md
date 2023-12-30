@@ -1,5 +1,11 @@
 # Animal Rescue in Ireland (Exploratory Data Analysis)
 
+**Author:** Fabio Tavares
+
+**Email:** fabio.tavares.fma@gmail.com
+
+**LinkedIn:** [Fabiohsst](https://www.linkedin.com/in/fabiohsst/)
+
 ## Problem Statement
 The purpose of this report is to provide information on the costs associated with animal rescues in Ireland. By analyzing data on the expenses incurred and the types of animals and interventions involved, was aimed to identify ways to reduce the annual expenditure on animal rescues through preventive measures.
 
